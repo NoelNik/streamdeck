@@ -1,0 +1,6 @@
+{
+    "board": "arduino:avr:leonardo",
+    "sketch": "streamdeck.ino",
+    "programmer": "arduino:avrispmkii",
+    "port": "COM6"
+}
