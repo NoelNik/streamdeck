@@ -1,10 +1,12 @@
+//https://mido.readthedocs.io/en/latest/message_types.html
+// 96	Data Bound Increment (+1)			cc control change
+// 97	Data Bound Decrement (-1)
 
 #include <frequencyToNote.h>
 #include <MIDIUSB.h>
 #include <MIDIUSB_Defs.h>
 #include <pitchToFrequency.h>
 #include <pitchToNote.h>
-
 #include <GyverEncoder.h>
 
 #define CLK1 2
@@ -27,6 +29,7 @@ int ohms_none = 0;         //сопротивление, пока не нажа�
 unsigned long middle = 0;
 Encoder enc1(CLK1, DT1, SW1); //установка энкодера 1
 
+//delay
 void smartdelay(int delaytime)
 {
   int realtime = millis();
@@ -34,6 +37,8 @@ void smartdelay(int delaytime)
   {
   }
 }
+//delay
+
 // омметр
 int ohms()
 {
@@ -45,19 +50,32 @@ int ohms()
     ohm_count = (Vin / Vout) - 1;
     R_find = R_const * ohm_count;
   }
-
-  return int(R_find);
-  //приделать delay (мб не надо)
+  return int(R_find); 
 }
 // омметр
+
+//среднее значение омметра
+int middle_oms()
+{
+  middle = 0;
+  for (int i = 0; i < 5; i++) //считывание среднего
+  {
+    middle += ohms();
+    smartdelay(40);
+  }
+  middle = middle / 5;
+  return
+}
+//среднее значение омметра
+
 void calibiration()
 {
 
-  ohms_none = ohms() + ohms() * 2;
+  ohms_none = ohms() *2;
   for (int i = 0; i < button_N; i++)
   {
     Serial.println("START"); //начало калибровки
-    delay(1000);
+    smartdelay(1000);
     Serial.println("Press button ");
     Serial.println(i + 1);
     while (ohms() < ohms_none)
@@ -67,34 +85,28 @@ void calibiration()
     for (int i = 0; i < 5; i++) //считывание среднего
     {
       middle += ohms();
-      delay(100);
+      smartdelay(100);
     }
     buttons_res[i] = middle / 5;
     Serial.println(middle / 5);
-    delay(400);
+    smartdelay(400);
   }
   Serial.println("buttons");
   for (int i = 0; i < 3; i++)
   {
     Serial.println(buttons_res[i]);
   }
-  delay(1000);
+  smartdelay(1000);
 }
 
 // поиск кнопки
 int button_find()
 {
-  middle = 0;
-  for (int i = 0; i < 5; i++) //считывание среднего
-  {
-    middle += ohms();
-    delay(40);
-  }
-  button_ohms = middle / 5;
+  button_ohms = middle_oms();
   int i = 0;
   while (i < button_N) //поиск кнопки
   {
-    if ((abs(button_ohms) / buttons_res[i]) < 1.5)
+    if ((abs(button_ohms) / buttons_res[i]) < 1.3)
     {
       return i + 1;
     }
@@ -112,25 +124,11 @@ void read()
 }
 //опрос всего
 
-//contol send для кнопок
-void button_send()
-{
-  if (button_found != 0)
-  {
-  }
-  else
-  {
-    for (int i = 0; i < button_N; i++)
-    {
-    }
-  }
-  button_found = 0;
-}
-//contol send для кнопок
-
+// 96	Data Bound Increment (+1)			cc control change
+// 97	Data Bound Decrement (-1)
 void setup()
 {
-  delay(4000);
+  smartdelay(4000);
   Serial.begin(9600);
   calibiration();
   // enc1.setType(TYPE1);    //установка типа энкодера (1 работает)
@@ -139,13 +137,13 @@ void setup()
 
 void loop()
 {
-  // Serial.println(ohms());
-  if (ohms() > ohms_none)
+  read();               //опрос
+  if (button_found > 0) //button control change send
   {
-    Serial.println(button_find());
+    MidiUSB.controlChange(midi_channel, 64 + button_found, 127);
+    MidiUSB.controlChange(midi_channel, 64 + button_found, 0);
+    button_found = 0;
   }
-  // Serial.println(ohms());
-  // read();
 }
 
 //midi функции
