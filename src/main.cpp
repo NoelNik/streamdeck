@@ -2,8 +2,6 @@
 #include <MIDIUSB.h>
 #include <MIDIUSB_Defs.h>
 #include <EncButton.h>
-#include <AppleMIDI.h>
-#include <ESP8266WiFi.h>
 
 #define analogPin A0 //pin омметра
 
