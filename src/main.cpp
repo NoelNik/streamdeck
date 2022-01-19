@@ -1,18 +1,9 @@
 #include <Arduino.h>
-#include <frequencyToNote.h>
-#include <MIDIUSB.h>
-#include <MIDIUSB_Defs.h>
-#include <pitchToFrequency.h>
-#include <pitchToNote.h>
-#include <GyverEncoder.h>
-
-#define calibiration_status 0 //запуск калибировки
-#define CLK1 2
-#define DT1 3
-#define SW1 4
+#include <EncButton.h>
+#include <AppleMIDI.h>
 #define analogPin A0 //pin омметра
 
-bool button_midi_states[3];         //switcherы
+int enc_value[3] = {100, 100, 100}; //значения энкодера
 int buttons_res[3] = {20, 60, 220}; // резисторы на кнопках
 int button_N = 3;                   //количество кнопок
 int analog_ohms = 0;                // показания с аналог пина
@@ -23,9 +14,19 @@ float R_find = 0;                   // искомый резистор
 int button_ohms = 0;                // запись ohms()
 int button_found = 0;               //запись найденной кнопки
 int midi_channel = 0;               //выбор  канала midi
-int ohms_none = R_const - 200;      //сопротивление, пока не нажата кнопка
-int k = 0;                          //k-костыль
-Encoder enc1(CLK1, DT1, SW1);       //установка энкодера 1pi
+
+EncButton<EB_CALLBACK, 5, 4> enc1;
+EncButton<EB_CALLBACK, 14, 12> enc2;
+EncButton<EB_CALLBACK, 13, 16> enc3;
+
+void isr()
+{
+  enc1.tickISR();
+  enc2.tickISR();
+  enc3.tickISR();
+}
+
+void ICACHE_RAM_ATTR isr();
 
 //smartdelay
 void smartdelay(unsigned long smartdelaytime)
@@ -33,10 +34,11 @@ void smartdelay(unsigned long smartdelaytime)
   unsigned long realtime = millis();
   while ((millis() - realtime) < smartdelaytime)
   {
+    ESP.wdtFeed();
   }
 }
 
-// омметр
+//омметр
 int ohms()
 {
   analog_ohms = analogRead(analogPin);
@@ -50,41 +52,16 @@ int ohms()
   return int(R_find);
 }
 
-//midi
-void controlChange(byte channel, byte control, byte value)
-{
-  midiEventPacket_t event = {0x0B, 0xB0 | channel, control, value};
-  MidiUSB.sendMIDI(event);
-  MidiUSB.flush();
-}
-void programChange(byte channel, byte program)
-{
-  midiEventPacket_t event = {0x0C, 0xC0 | channel, program, 0};
-  MidiUSB.sendMIDI(event);
-  MidiUSB.flush();
-}
-void noteOn(byte channel, byte pitch, byte velocity)
-{
-  midiEventPacket_t noteOn = {0x09, 0x90 | channel, pitch, velocity};
-  MidiUSB.sendMIDI(noteOn);
-  MidiUSB.flush();
-}
-void noteOff(byte channel, byte pitch, byte velocity)
-{
-  midiEventPacket_t noteOff = {0x08, 0x80 | channel, pitch, velocity};
-  MidiUSB.sendMIDI(noteOff);
-  MidiUSB.flush();
-}
-
 //среднее значение омметра
 int middle_oms()
 {
-  int middle=0;
+  int middle = 0;
   int maxmiddle = 0;
   for (int i = 0; i < 5; i++) //считывание среднего
   {
     middle = ohms();
-    if (middle>maxmiddle){
+    if (middle > maxmiddle)
+    {
       maxmiddle = middle;
     }
     smartdelay(10);
@@ -99,8 +76,9 @@ void calibiration()
   {
     Serial.print("Press button ");
     Serial.println(i + 1);
-    while (ohms() > 600)
+    while (ohms() < 4000)
     {
+      ESP.wdtFeed();
     }
     buttons_res[i] = middle_oms();
     Serial.println(middle_oms());
@@ -133,42 +111,90 @@ int button_find()
 //опрос всего
 void read()
 {
-  button_found = button_find();
-  unsigned long realtime = millis();
-  // smartdelay(50);
-  // if (button_find() != button_found)
-  // {
-  //   button_found = 0;
-  //   }
-  // enc1.tick(); //считывание энкодера
+  // button_found = button_find();
+}
+
+void enc_send()
+{
+  if (enc1.isTurn())
+  {
+    enc_value[0] += enc1.getDir();
+    if (enc_value[0] > 127)
+    {
+      enc_value[0] = 127;
+    }
+    if (enc_value[0] < 0)
+    {
+      enc_value[0] = 0;
+    }
+    Serial.print("1 ");
+    Serial.println(enc_value[0]);
+  }
+  if (enc2.isTurn())
+  {
+    enc_value[1] += enc2.getDir();
+    if (enc_value[1] > 127)
+    {
+      enc_value[1] = 127;
+    }
+    if (enc_value[1] < 0)
+    {
+      enc_value[1] = 0;
+    }
+    Serial.print("2 ");
+    Serial.println(enc_value[1]);
+  }
+  if (enc3.isTurn())
+  {
+    enc_value[2] += enc3.getDir();
+    if (enc_value[2] > 127)
+    {
+      enc_value[2] = 127;
+    }
+    if (enc_value[2] < 0)
+    {
+      enc_value[2] = 0;
+    }
+    Serial.print("3 ");
+    Serial.println(enc_value[2]);
+  }
 }
 
 //midi button send
-void button_send()
-{
-  if (button_found > 0) //button control change send
-  {
-    noteOn(midi_channel, button_found, 127);
-    while (button_find() == button_found)
-    {
-    }
-  }
-}
+// void button_send()
+// {
+//   if (button_found > 0) //button control change send
+//   {
+//     Serial.println(button_found);
+//     // MIDI.noteOn(midi_channel, button_found, 127);
+//     while (button_find() == button_found)
+//     {
+//     }
+//   }
+// }
 
 void setup()
 {
-  Serial.begin(9600);
+  Serial.begin(115200);
   smartdelay(5000);
-  if (Serial)
-  {
-    calibiration();
-  }
-  // enc1.setType(TYPE1);    //установка типа энкодера (1 работает)
-  // enc1.setTickMode(AUTO); //установка прерывания для энкодера
+  // if (Serial)
+  // {
+  //   calibiration();
+  // }
+  attachInterrupt(digitalPinToInterrupt(5), isr, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(4), isr, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(12), isr, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(14), isr, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(13), isr, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(16), isr, CHANGE);
 }
 
 void loop()
 {
-  read();
-  button_send();
+  // read();
+  enc_send();
+  // button_send();
+  Serial.println(analogRead(analogPin));
+  // Serial.println(ohms());
+  // Serial.println(button_find());
 }
