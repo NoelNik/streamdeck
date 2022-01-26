@@ -1,8 +1,21 @@
-#include <Arduino.h>
 #include <EncButton.h>
-#include <AppleMIDI.h>
-#define analogPin A0 //pin омметра
+#include <ESP8266WiFi.h>
+#include <WiFiClient.h>
+#include <WiFiUdp.h>
 
+#define SerialMon Serial
+#define APPLEMIDI_DEBUG SerialMon
+#include <AppleMIDI.h>
+
+char ssid[] = "Max";        //  your network SSID (name)
+char pass[] = "ML87654312"; // your network password (use for WPA, or use as key for WEP)
+
+unsigned long t0 = millis();
+int8_t isConnected = 0;
+
+APPLEMIDI_CREATE_DEFAULTSESSION_INSTANCE();
+
+#define analogPin A0                //pin омметра
 int enc_value[3] = {100, 100, 100}; //значения энкодера
 int buttons_res[3] = {20, 60, 220}; // резисторы на кнопках
 int button_N = 3;                   //количество кнопок
@@ -13,7 +26,7 @@ const float R_const = 1000;         // эталонный резистор
 float R_find = 0;                   // искомый резистор
 int button_ohms = 0;                // запись ohms()
 int button_found = 0;               //запись найденной кнопки
-int midi_channel = 0;               //выбор  канала midi
+int midi_channel = 1;               //выбор  канала midi
 
 EncButton<EB_CALLBACK, 5, 4> enc1;
 EncButton<EB_CALLBACK, 14, 12> enc2;
@@ -38,10 +51,10 @@ void smartdelay(unsigned long smartdelaytime)
   }
 }
 
-//омметр
+// //омметр
 int ohms()
 {
-  analog_ohms = analogRead(analogPin);
+  analog_ohms = analogRead(A0);
   if (analog_ohms)
   {
     float ohm_count = analog_ohms * Vin; // буфер для расчета сопротивления
@@ -52,7 +65,7 @@ int ohms()
   return int(R_find);
 }
 
-//среднее значение омметра
+// //среднее значение омметра
 int middle_oms()
 {
   int middle = 0;
@@ -127,8 +140,8 @@ void enc_send()
     {
       enc_value[0] = 0;
     }
-    Serial.print("1 ");
     Serial.println(enc_value[0]);
+    MIDI.sendControlChange(byte(20), byte(enc_value[0]), byte(midi_channel));
   }
   if (enc2.isTurn())
   {
@@ -141,8 +154,7 @@ void enc_send()
     {
       enc_value[1] = 0;
     }
-    Serial.print("2 ");
-    Serial.println(enc_value[1]);
+    MIDI.sendControlChange(byte(21), byte(enc_value[1]), byte(midi_channel));
   }
   if (enc3.isTurn())
   {
@@ -155,46 +167,70 @@ void enc_send()
     {
       enc_value[2] = 0;
     }
-    Serial.print("3 ");
-    Serial.println(enc_value[2]);
+    MIDI.sendControlChange(byte(22), byte(enc_value[2]), byte(midi_channel));
   }
 }
 
-//midi button send
-// void button_send()
-// {
-//   if (button_found > 0) //button control change send
-//   {
-//     Serial.println(button_found);
-//     // MIDI.noteOn(midi_channel, button_found, 127);
-//     while (button_find() == button_found)
-//     {
-//     }
-//   }
-// }
-
-void setup()
+// // midi button send
+void button_send()
 {
-  Serial.begin(115200);
-  smartdelay(5000);
-  // if (Serial)
-  // {
-  //   calibiration();
-  // }
-  attachInterrupt(digitalPinToInterrupt(5), isr, CHANGE);
-  attachInterrupt(digitalPinToInterrupt(4), isr, CHANGE);
-  attachInterrupt(digitalPinToInterrupt(12), isr, CHANGE);
-  attachInterrupt(digitalPinToInterrupt(14), isr, CHANGE);
-  attachInterrupt(digitalPinToInterrupt(13), isr, CHANGE);
-  attachInterrupt(digitalPinToInterrupt(16), isr, CHANGE);
+  if (button_found > 0) //button control change send
+  {
+    Serial.println(button_found);
+    // MIDI.noteOn(midi_channel, button_found, 127);
+    while (button_find() == button_found)
+    {
+    }
+  }
+}
+
+void setup(){
+  smartdelay(2000);
+Serial.begin(9600);
+attachInterrupt(digitalPinToInterrupt(5), isr, CHANGE);
+attachInterrupt(digitalPinToInterrupt(4), isr, CHANGE);
+attachInterrupt(digitalPinToInterrupt(12), isr, CHANGE);
+attachInterrupt(digitalPinToInterrupt(14), isr, CHANGE);
+attachInterrupt(digitalPinToInterrupt(13), isr, CHANGE);
+attachInterrupt(digitalPinToInterrupt(16), isr, CHANGE);
+ DBG_SETUP(9600);
+  DBG("Booting");
+
+  WiFi.begin(ssid, pass);
+
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    DBG("Establishing connection to WiFi..");
+  }
+  DBG("Connected to network");
+  DBG(F("Add device named Arduino with Host"), WiFi.localIP(), "Port", AppleMIDI.getPort(), "(Name", AppleMIDI.getName(), ")");
+  MIDI.begin();
+
+  AppleMIDI.setHandleConnected([](const APPLEMIDI_NAMESPACE::ssrc_t & ssrc, const char* name) {
+    isConnected++;
+    DBG(F("Connected to session"), ssrc, name);
+  });
+  AppleMIDI.setHandleDisconnected([](const APPLEMIDI_NAMESPACE::ssrc_t & ssrc) {
+    isConnected--;
+    DBG(F("Disconnected"), ssrc);
+  });
+  
+  MIDI.setHandleNoteOn([](byte channel, byte note, byte velocity) {
+    DBG(F("NoteOn"), note);
+  });
+  MIDI.setHandleNoteOff([](byte channel, byte note, byte velocity) {
+    DBG(F("NoteOff"), note);
+  });
+  MIDI.setHandleControlChange([](byte channel, byte control, byte value)
+                              { DBG(F("ControlChange"), control); });
 }
 
 void loop()
 {
-  // read();
-  enc_send();
-  // button_send();
-  Serial.println(analogRead(analogPin));
-  // Serial.println(ohms());
-  // Serial.println(button_find());
+    MIDI.read();
+   if ((isConnected > 0))
+  { 
+    enc_send();
+  }
 }
+//MIDI.sendControlChange(control, value, channel)
