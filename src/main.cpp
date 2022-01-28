@@ -124,7 +124,7 @@ int button_find()
 //опрос всего
 void read()
 {
-  // button_found = button_find();
+  button_found = button_find();
 }
 
 void enc_send()
@@ -184,21 +184,23 @@ void button_send()
   }
 }
 
-void setup(){
+void setup()
+{
   smartdelay(2000);
-Serial.begin(9600);
-attachInterrupt(digitalPinToInterrupt(5), isr, CHANGE);
-attachInterrupt(digitalPinToInterrupt(4), isr, CHANGE);
-attachInterrupt(digitalPinToInterrupt(12), isr, CHANGE);
-attachInterrupt(digitalPinToInterrupt(14), isr, CHANGE);
-attachInterrupt(digitalPinToInterrupt(13), isr, CHANGE);
-attachInterrupt(digitalPinToInterrupt(16), isr, CHANGE);
- DBG_SETUP(9600);
+  Serial.begin(9600);
+  attachInterrupt(digitalPinToInterrupt(5), isr, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(4), isr, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(12), isr, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(14), isr, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(13), isr, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(16), isr, CHANGE);
+  DBG_SETUP(9600);
   DBG("Booting");
 
   WiFi.begin(ssid, pass);
 
-  while (WiFi.status() != WL_CONNECTED) {
+  while (WiFi.status() != WL_CONNECTED)
+  {
     delay(500);
     DBG("Establishing connection to WiFi..");
   }
@@ -206,30 +208,30 @@ attachInterrupt(digitalPinToInterrupt(16), isr, CHANGE);
   DBG(F("Add device named Arduino with Host"), WiFi.localIP(), "Port", AppleMIDI.getPort(), "(Name", AppleMIDI.getName(), ")");
   MIDI.begin();
 
-  AppleMIDI.setHandleConnected([](const APPLEMIDI_NAMESPACE::ssrc_t & ssrc, const char* name) {
-    isConnected++;
-    DBG(F("Connected to session"), ssrc, name);
-  });
-  AppleMIDI.setHandleDisconnected([](const APPLEMIDI_NAMESPACE::ssrc_t & ssrc) {
-    isConnected--;
-    DBG(F("Disconnected"), ssrc);
-  });
-  
-  MIDI.setHandleNoteOn([](byte channel, byte note, byte velocity) {
-    DBG(F("NoteOn"), note);
-  });
-  MIDI.setHandleNoteOff([](byte channel, byte note, byte velocity) {
-    DBG(F("NoteOff"), note);
-  });
+  AppleMIDI.setHandleConnected([](const APPLEMIDI_NAMESPACE::ssrc_t &ssrc, const char *name)
+                               {
+                                 isConnected++;
+                                 DBG(F("Connected to session"), ssrc, name);
+                               });
+  AppleMIDI.setHandleDisconnected([](const APPLEMIDI_NAMESPACE::ssrc_t &ssrc)
+                                  {
+                                    isConnected--;
+                                    DBG(F("Disconnected"), ssrc);
+                                  });
+
+  MIDI.setHandleNoteOn([](byte channel, byte note, byte velocity)
+                       { DBG(F("NoteOn"), note); });
+  MIDI.setHandleNoteOff([](byte channel, byte note, byte velocity)
+                        { DBG(F("NoteOff"), note); });
   MIDI.setHandleControlChange([](byte channel, byte control, byte value)
                               { DBG(F("ControlChange"), control); });
 }
 
 void loop()
 {
-    MIDI.read();
-   if ((isConnected > 0))
-  { 
+  MIDI.read();
+  if ((isConnected > 0))
+  {
     enc_send();
   }
 }
