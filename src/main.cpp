@@ -14,13 +14,13 @@ unsigned long t0 = millis();
 int8_t isConnected = 0;
 
 APPLEMIDI_CREATE_DEFAULTSESSION_INSTANCE();
-
+#define calibirate 0                //запуск калибровки кнопок
 #define analogPin A0                //pin омметра
 int enc_value[3] = {100, 100, 100}; //значения энкодера
-int buttons_res[3] = {20, 60, 220}; // резисторы на кнопках
-int button_N = 3;                   //количество кнопок
+int button_N = 4;                   //количество кнопок
+int buttons_res[4]{7, 26, 61, 147}; // резисторы на кнопках
 int analog_ohms = 0;                // показания с аналог пина
-const int Vin = 5;                  //опорное напряжение платы
+const float Vin = 3.3;              //опорное напряжение платы
 float Vout = 0;                     // напряжение на резисторе
 const float R_const = 1000;         // эталонный резистор
 float R_find = 0;                   // искомый резистор
@@ -82,6 +82,7 @@ int middle_oms()
   return maxmiddle;
 }
 
+// калибровка
 void calibiration()
 {
   Serial.println("START"); //начало калибровки
@@ -89,16 +90,17 @@ void calibiration()
   {
     Serial.print("Press button ");
     Serial.println(i + 1);
-    while (ohms() < 4000)
+    while (ohms() > 200)
     {
       ESP.wdtFeed();
     }
     buttons_res[i] = middle_oms();
     Serial.println(middle_oms());
-    smartdelay(1000);
+    Serial.println('OK');
+    smartdelay(2000);
   }
   Serial.println("buttons");
-  for (int i = 0; i < 3; i++)
+  for (int i = 0; i < button_N; i++)
   {
     Serial.println(buttons_res[i]);
   }
@@ -112,7 +114,7 @@ int button_find()
   int i = 0;
   while (i < button_N) //поиск кнопки
   {
-    if ((abs(button_ohms) / buttons_res[i]) < 1.1)
+    if (abs(buttons_res[i] - button_ohms) < buttons_res[i] * 0.3)
     {
       return i + 1;
     }
@@ -121,12 +123,13 @@ int button_find()
   return 0;
 }
 
-//опрос всего
+//опрос кнопок
 void read()
 {
   button_found = button_find();
 }
 
+// midi control send
 void enc_send()
 {
   if (enc1.isTurn())
@@ -140,7 +143,6 @@ void enc_send()
     {
       enc_value[0] = 0;
     }
-    Serial.println(enc_value[0]);
     MIDI.sendControlChange(byte(20), byte(enc_value[0]), byte(midi_channel));
   }
   if (enc2.isTurn())
@@ -171,13 +173,12 @@ void enc_send()
   }
 }
 
-// // midi button send
+// midi button send
 void button_send()
 {
   if (button_found > 0) //button control change send
   {
-    Serial.println(button_found);
-    // MIDI.noteOn(midi_channel, button_found, 127);
+    MIDI.sendNoteOn(byte(button_found), byte(0), byte(midi_channel));
     while (button_find() == button_found)
     {
     }
@@ -225,6 +226,13 @@ void setup()
                         { DBG(F("NoteOff"), note); });
   MIDI.setHandleControlChange([](byte channel, byte control, byte value)
                               { DBG(F("ControlChange"), control); });
+
+  if (calibirate)
+  {
+    calibiration();
+  }
+  pinMode(16, INPUT);
+  digitalWrite(16, 0);
 }
 
 void loop()
@@ -232,7 +240,8 @@ void loop()
   MIDI.read();
   if ((isConnected > 0))
   {
+    read();
     enc_send();
+    button_send();
   }
 }
-//MIDI.sendControlChange(control, value, channel)
