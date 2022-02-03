@@ -7,8 +7,8 @@
 #define APPLEMIDI_DEBUG SerialMon
 #include <AppleMIDI.h>
 
-char ssid[] = "Max";        //  your network SSID (name)
-char pass[] = "ML87654312"; // your network password (use for WPA, or use as key for WEP)
+String ssid = "P30";        //  your network SSID (name)
+String pass = "R7654312"; // your network password (use for WPA, or use as key for WEP)
 
 unsigned long t0 = millis();
 int8_t isConnected = 0;
@@ -178,7 +178,7 @@ void button_send()
 {
   if (button_found > 0) //button control change send
   {
-    MIDI.sendNoteOn(byte(button_found), byte(0), byte(midi_channel));
+    MIDI.sendNoteOn(byte(button_found), byte(127), byte(midi_channel));
     while (button_find() == button_found)
     {
     }
@@ -187,7 +187,7 @@ void button_send()
 
 void setup()
 {
-  smartdelay(2000);
+  smartdelay(5000);
   Serial.begin(9600);
   attachInterrupt(digitalPinToInterrupt(5), isr, CHANGE);
   attachInterrupt(digitalPinToInterrupt(4), isr, CHANGE);
@@ -231,8 +231,6 @@ void setup()
   {
     calibiration();
   }
-  pinMode(16, INPUT);
-  digitalWrite(16, 0);
 }
 
 void loop()
